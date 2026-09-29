@@ -1,0 +1,1124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>US Protest Events — Crowd Counting Consortium</title>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:wght@400;500;600&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="vendor/d3.min.js"></script>
+<style>
+  :root{--paper:#EDEAE2;--card:#F7F5EF;--ink:#1E2A33;--soft:#5B6670;
+    --gold:#A87A12;--teal:#3B6E5E;--line:#D8D3C7;
+    --left:#4A6E9E;--right:#B85C4A;--other:#8A8578;}
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--paper);color:var(--ink);
+    font-family:'Public Sans',sans-serif;font-size:14px;}
+  .app{display:grid;grid-template-columns:282px 1fr;height:100vh;height:calc(var(--vh,1vh)*100);}
+  .side{background:var(--card);border-right:1px solid var(--line);overflow-y:auto;}
+  .brand{padding:15px 18px 13px;border-bottom:1px solid var(--line);}
+  .brand h1{font-family:'Newsreader',serif;font-size:17px;font-weight:600;margin:0;}
+  .brand .s{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--soft);
+    letter-spacing:.06em;text-transform:uppercase;margin-top:3px;}
+  .g{padding:13px 18px;border-bottom:1px solid var(--line);}
+  .lab{font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.08em;
+    text-transform:uppercase;color:var(--soft);margin-bottom:9px;}
+  .dates{display:flex;align-items:center;gap:6px;margin-bottom:8px;}
+  .dbox{flex:1;min-width:0;border:1px solid var(--line);border-radius:3px;padding:5px 4px;
+    background:#fff;color:var(--ink);font-family:'IBM Plex Mono',monospace;font-size:10px;
+    text-align:center;}
+  .dbox:focus{outline:none;border-color:var(--gold);}
+  .dbox::-webkit-calendar-picker-indicator{opacity:.45;cursor:pointer;}
+  .dsep{font-size:10px;color:var(--soft);}
+  .sstack{position:relative;height:52px;margin-top:2px;}
+  #spark{position:absolute;top:0;left:0;width:100%;height:30px;}
+  .sliderhint{position:absolute;bottom:0;left:0;right:0;text-align:center;
+    font-family:'IBM Plex Mono',monospace;font-size:8px;letter-spacing:.09em;
+    text-transform:uppercase;color:var(--soft);opacity:.75;pointer-events:none;}
+  input[type=range]{-webkit-appearance:none;appearance:none;width:100%;background:transparent;
+    position:absolute;top:30px;left:0;pointer-events:none;margin:0;height:14px;}
+  /* track */
+  input[type=range]::-webkit-slider-runnable-track{height:4px;background:var(--line);
+    border-radius:2px;}
+  input[type=range]::-moz-range-track{height:4px;background:var(--line);border-radius:2px;}
+  /* handles: large enough to read as grabbable */
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;pointer-events:auto;
+    width:16px;height:16px;border-radius:50%;background:var(--gold);
+    border:3px solid var(--card);cursor:grab;margin-top:-6px;
+    box-shadow:0 1px 4px rgba(30,42,51,.35);}
+  input[type=range]::-webkit-slider-thumb:active{cursor:grabbing;background:#8F6810;}
+  input[type=range]::-moz-range-thumb{pointer-events:auto;width:16px;height:16px;
+    border-radius:50%;background:var(--gold);border:3px solid var(--card);cursor:grab;
+    box-shadow:0 1px 4px rgba(30,42,51,.35);}
+  .chips{display:flex;flex-wrap:wrap;gap:4px;}
+  .chip{font-family:'IBM Plex Mono',monospace;font-size:9.5px;padding:3.5px 7px;
+    border:1px solid var(--line);border-radius:3px;color:var(--soft);cursor:pointer;
+    user-select:none;transition:all .12s;}
+  .chip:hover{border-color:var(--soft);}
+  .chip.on{background:var(--gold);border-color:var(--gold);color:#fff;}
+  .chip.on.v0{background:var(--left);border-color:var(--left);}
+  .chip.on.v1{background:var(--right);border-color:var(--right);}
+  .chip.on.v2{background:var(--other);border-color:var(--other);}
+  .tg{display:flex;align-items:center;gap:8px;padding:3.5px 0;cursor:pointer;
+    font-size:12.5px;color:var(--soft);}
+  .tg:hover{color:var(--ink);}
+  .bx{width:14px;height:14px;border:1px solid var(--line);border-radius:2px;background:#fff;
+    flex-shrink:0;position:relative;transition:all .12s;}
+  .tg.on .bx{background:var(--teal);border-color:var(--teal);}
+  .tg.on .bx::after{content:'';position:absolute;left:4px;top:1px;width:4px;height:8px;
+    border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg);}
+  .tg.on{color:var(--ink);}
+  .search{display:flex;gap:5px;}
+  .search input{flex:1;border:1px solid var(--line);border-radius:3px;padding:6px 8px;
+    font-size:12px;background:#fff;color:var(--ink);font-family:'Public Sans',sans-serif;}
+  .search input:focus{outline:none;border-color:var(--gold);}
+  .search button{border:1px solid var(--line);background:#fff;border-radius:3px;
+    padding:0 9px;cursor:pointer;color:var(--soft);}
+  .reset{width:100%;padding:7px;background:transparent;border:1px solid var(--line);
+    border-radius:3px;font-family:'IBM Plex Mono',monospace;font-size:10px;
+    letter-spacing:.06em;text-transform:uppercase;color:var(--soft);cursor:pointer;}
+  .reset:hover{border-color:var(--soft);color:var(--ink);}
+  .note{font-family:'IBM Plex Mono',monospace;font-size:8.5px;color:var(--soft);
+    line-height:1.5;letter-spacing:.02em;}
+
+  .main{display:flex;flex-direction:column;overflow:hidden;}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);
+    border-bottom:1px solid var(--line);}
+  .stat{background:var(--card);padding:10px 15px;}
+  .stat .n{font-family:'IBM Plex Mono',monospace;font-size:21px;font-weight:500;
+    font-variant-numeric:tabular-nums;line-height:1.1;}
+  .stat .l{font-family:'IBM Plex Mono',monospace;font-size:8.5px;color:var(--soft);
+    letter-spacing:.07em;text-transform:uppercase;margin-top:3px;}
+  .stat.pa .n{color:var(--teal);}
+  .stat.md .n{color:var(--gold);}
+  .stat.st .n{color:var(--soft);}
+  .body{flex:1;display:grid;grid-template-columns:1fr 292px;overflow:hidden;}
+  .mapbox{position:relative;background:var(--paper);overflow:hidden;}
+  #mapCanvas{position:absolute;inset:0;cursor:grab;}
+  #mapCanvas.drag{cursor:grabbing;}
+  .zoomctl{position:absolute;bottom:13px;right:13px;display:flex;flex-direction:column;gap:1px;
+    background:var(--line);border:1px solid var(--line);border-radius:4px;overflow:hidden;z-index:6;}
+  .zoomctl button{width:27px;height:27px;background:var(--card);border:none;cursor:pointer;
+    font-size:15px;color:var(--ink);line-height:1;}
+  .zoomctl button:hover{background:#fff;}
+  .legendToggle{position:absolute;top:11px;right:11px;z-index:6;background:var(--card);
+    border:1px solid var(--line);border-radius:4px;padding:6px 10px;cursor:pointer;
+    font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.06em;
+    text-transform:uppercase;color:var(--soft);}
+  .legendToggle:hover{border-color:var(--soft);color:var(--ink);}
+  .legend{position:absolute;top:11px;right:11px;background:var(--card);border:1px solid var(--line);
+    border-radius:4px;padding:9px 11px;z-index:5;display:none;max-width:190px;}
+  .legend.open{display:block;}
+  .lt{font-family:'IBM Plex Mono',monospace;font-size:8.5px;color:var(--soft);
+    letter-spacing:.06em;text-transform:uppercase;margin-bottom:5px;}
+  .lr{display:flex;align-items:center;gap:7px;margin:2.5px 0;
+    font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:var(--soft);}
+  .ld{border-radius:50%;background:transparent;border:1.3px solid var(--soft);flex-shrink:0;}
+  .lsep{height:1px;background:var(--line);margin:7px 0;}
+  .lv{width:9px;height:9px;border-radius:50%;}
+  .hint{position:absolute;bottom:76px;right:13px;font-family:'IBM Plex Mono',monospace;
+    font-size:8.5px;color:var(--soft);letter-spacing:.05em;z-index:5;text-align:right;
+    max-width:150px;line-height:1.5;}
+  .pop{position:absolute;z-index:8;background:var(--card);border:1px solid var(--line);
+    border-radius:4px;padding:9px 11px;font-size:12px;pointer-events:none;display:none;
+    box-shadow:0 3px 14px rgba(30,42,51,.16);max-width:230px;}
+  .pop .t{font-weight:600;margin-bottom:2px;}
+  .pop .m{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--soft);margin-top:3px;}
+  .pop .src{margin-top:7px;padding-top:6px;border-top:1px solid var(--line);
+    color:var(--teal);word-break:break-all;}
+  .rail{background:var(--card);border-left:1px solid var(--line);overflow-y:auto;}
+  .cb{padding:13px 15px;border-bottom:1px solid var(--line);}
+  .ct{font-family:'Newsreader',serif;font-size:13.5px;font-weight:600;}
+  .cs{font-family:'IBM Plex Mono',monospace;font-size:8.5px;color:var(--soft);
+    letter-spacing:.05em;text-transform:uppercase;margin:2px 0 9px;}
+  .axis text{font-family:'IBM Plex Mono',monospace;font-size:8.5px;fill:var(--soft);}
+  .axis path,.axis line{stroke:var(--line);}
+  .br{margin:7px 0;}
+  .brtop{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:3px;}
+  .bl{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--ink);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .bvv{font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:var(--soft);flex-shrink:0;}
+  .bt{flex:1;height:10px;background:#E4E0D4;border-radius:2px;overflow:hidden;}
+  .bf{height:100%;background:var(--gold);transition:width .2s;}
+  .bv{width:42px;font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--soft);text-align:right;}
+  .aboutBtn{display:block;width:100%;margin-top:11px;padding:7px 10px;
+    background:var(--gold);border:1px solid var(--gold);border-radius:3px;cursor:pointer;
+    font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.07em;
+    text-transform:uppercase;color:#fff;text-align:center;}
+  .aboutBtn:hover{background:#8F6810;border-color:#8F6810;}
+  .listBg{position:fixed;inset:0;background:rgba(30,42,51,.45);z-index:55;
+    display:none;align-items:center;justify-content:center;padding:24px;}
+  .listBg.open{display:flex;}
+  .listPanel{background:var(--card);border:1px solid var(--line);border-radius:6px;
+    max-width:560px;width:100%;max-height:80vh;display:flex;flex-direction:column;
+    box-shadow:0 8px 40px rgba(30,42,51,.28);}
+  .listHead{padding:18px 22px 14px;border-bottom:1px solid var(--line);}
+  .listHead h3{font-family:'Newsreader',serif;font-size:18px;font-weight:600;margin:0;}
+  .listHead .sub{font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:var(--soft);
+    letter-spacing:.06em;text-transform:uppercase;margin-top:4px;}
+  .listBody{overflow-y:auto;padding:4px 0;}
+  .ev{padding:10px 22px;border-bottom:1px solid var(--line);}
+  .ev:last-child{border-bottom:none;}
+  .ev .top{display:flex;justify-content:space-between;gap:10px;align-items:baseline;}
+  .ev .dt{font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--soft);}
+  .ev .sz{font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--gold);}
+  .ev .cl{font-size:13px;margin-top:3px;line-height:1.45;}
+  .ev .mt{font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:var(--soft);margin-top:4px;}
+  .ev .vd{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;
+    vertical-align:middle;}
+  .listFoot{padding:11px 22px;border-top:1px solid var(--line);
+    font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:var(--soft);
+    display:flex;justify-content:space-between;align-items:center;}
+  .listFoot button{background:transparent;border:1px solid var(--line);border-radius:3px;
+    padding:5px 12px;cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:9.5px;
+    letter-spacing:.06em;text-transform:uppercase;color:var(--soft);}
+  .listFoot button:hover{border-color:var(--soft);color:var(--ink);}
+  .modalBg{position:fixed;inset:0;background:rgba(30,42,51,.45);z-index:50;
+    display:none;align-items:center;justify-content:center;padding:24px;}
+  .modalBg.open{display:flex;}
+  .modal{background:var(--card);border:1px solid var(--line);border-radius:6px;
+    max-width:620px;width:100%;max-height:84vh;overflow-y:auto;padding:28px 30px;
+    box-shadow:0 8px 40px rgba(30,42,51,.28);}
+  .modal h2{font-family:'Newsreader',serif;font-size:21px;font-weight:600;margin:0 0 4px;}
+  .modal .sub{font-family:'Newsreader',serif;font-style:italic;font-size:14px;
+    color:var(--soft);margin-bottom:18px;}
+  .modal p{font-size:14px;line-height:1.65;margin:0 0 14px;color:var(--ink);}
+  .modal h3{font-family:'Newsreader',serif;font-style:italic;font-weight:500;font-size:16px;
+    color:var(--ink);margin:22px 0 8px;}
+  .modal ul{margin:0 0 14px;padding-left:18px;font-size:13.5px;line-height:1.6;}
+  .modal li{margin-bottom:5px;}
+  .modalClose{float:right;background:transparent;border:1px solid var(--line);
+    border-radius:3px;width:26px;height:26px;cursor:pointer;color:var(--soft);
+    font-size:14px;line-height:1;margin:-4px -4px 0 0;}
+  .modalClose:hover{border-color:var(--soft);color:var(--ink);}
+  #loading{position:fixed;inset:0;background:var(--paper);z-index:99;display:flex;
+    align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;
+    font-size:11px;color:var(--soft);letter-spacing:.08em;text-transform:uppercase;}
+  /* ---------- mobile layout ---------- */
+  .filterToggle{display:none;position:fixed;bottom:18px;left:18px;z-index:20;
+    background:var(--gold);color:#fff;border:none;border-radius:24px;
+    padding:11px 18px;font-family:'IBM Plex Mono',monospace;font-size:11px;
+    letter-spacing:.06em;text-transform:uppercase;box-shadow:0 3px 14px rgba(30,42,51,.35);
+    cursor:pointer;}
+  .sideClose{display:none;}
+  .sideBackdrop{display:none;position:fixed;inset:0;background:rgba(30,42,51,.45);z-index:35;}
+  .sideBackdrop.open{display:block;}
+
+  @media (max-width:760px){
+    html,body{height:auto;min-height:100%;overflow-y:auto;overflow-x:hidden;}
+    .app{grid-template-columns:1fr;height:auto;min-height:100vh;}
+    .side{position:fixed;top:0;left:0;bottom:0;width:86%;max-width:320px;z-index:40;
+      transform:translateX(-101%);transition:transform .22s ease;
+      box-shadow:2px 0 20px rgba(30,42,51,.28);}
+    .side.open{transform:translateX(0);}
+    .sideClose{display:block;position:absolute;top:14px;right:14px;background:transparent;
+      border:1px solid var(--line);border-radius:3px;width:26px;height:26px;
+      font-size:14px;color:var(--soft);cursor:pointer;}
+    .brand{position:relative;}
+    .filterToggle{display:block;}
+    .main{overflow:visible;}
+    .stats{grid-template-columns:repeat(2,1fr);}
+    .body{grid-template-columns:1fr;overflow:visible;}
+    .mapbox{height:calc(var(--vh,1vh)*64);min-height:360px;}
+    .rail{border-left:none;border-top:1px solid var(--line);overflow-y:visible;
+      max-height:none;padding-bottom:70px;}   /* clears the floating toggle */
+  }
+
+  .chartTip{position:fixed;z-index:60;background:var(--card);border:1px solid var(--line);
+    border-radius:4px;padding:8px 10px;font-size:11px;pointer-events:none;display:none;
+    box-shadow:0 3px 14px rgba(30,42,51,.18);}
+  .chartTip .t{font-weight:600;}
+  .chartTip .m{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--soft);margin-top:2px;}
+  ::-webkit-scrollbar{width:8px;}
+  ::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px;}
+</style>
+</head>
+<body>
+<div id="loading">Loading events…</div>
+<div class="app">
+  <aside class="side">
+    <div class="brand"><button class="sideClose" id="sideClose">&times;</button><h1>US Protest Events</h1><div class="s">Crowd Counting Consortium</div>
+      <div class="s" id="brandSub">—</div>
+      <button class="aboutBtn" id="aboutBtn">About the data &amp; dashboard</button></div>
+    <div class="g">
+      <div class="lab">Choose a date range</div>
+      <div class="dates"><input type="date" class="dbox" id="dF"><span class="dsep">to</span><input type="date" class="dbox" id="dT"></div>
+      <div class="sstack"><canvas id="spark"></canvas>
+        <input type="range" id="rA" min="0" max="1000" value="0">
+        <input type="range" id="rB" min="0" max="1000" value="1000">
+        <div class="sliderhint">drag the handles to change the range</div></div>
+    </div>
+    <div class="g"><div class="lab">Filter by political issue</div><div class="chips" id="issues"></div>
+      <div class="note" style="margin-top:7px;">Matches any selected issue. Select none to see all.</div></div>
+    <div class="g"><div class="lab">Filter by political valence</div><div class="chips" id="valence"></div></div>
+    <div class="g"><div class="lab">Filter by event type</div><div class="chips" id="etypes"></div>
+      <div class="note" id="typeNote" style="margin-top:7px;">DEMONSTRATION INCLUDES MARCHES, RALLIES AND VIGILS</div></div>
+    <div class="g"><div class="lab">Only show events with</div><div id="flags"></div></div>
+    <div class="g"><div class="lab">Filter by claim text</div>
+      <div class="search"><input type="text" id="claimQ" placeholder="e.g. Gaza, immigration"><button id="claimX">✕</button></div></div>
+    <div class="g"><div class="lab">Options</div><div id="online"></div></div>
+    <div class="g"><button class="reset" id="reset">Reset all filters</button></div>
+    <div class="g" style="border-bottom:none;">
+      <div class="note" id="provenance"></div>
+    </div>
+  </aside>
+  <div class="sideBackdrop" id="sideBackdrop"></div>
+  <button class="filterToggle" id="filterToggle">Filters</button>
+  <div class="main">
+    <div class="stats">
+      <div class="stat ev"><div class="n" id="sEv">0</div><div class="l">Events</div></div>
+      <div class="stat pa" title="Sum of crowd-size estimates for events where one was recorded. See the tile at right for what share of the current selection that covers."><div class="n" id="sPa">0</div><div class="l">Recorded participants</div></div>
+      <div class="stat md" title="Share of the currently filtered events that have a crowd-size estimate. When this is low, treat the participant total as a floor, not a measure."><div class="n" id="sMd">0</div><div class="l">Events with size estimate</div></div>
+      <div class="stat st"><div class="n" id="sSt">0</div><div class="l">States &amp; territories</div></div>
+    </div>
+    <div class="body">
+      <div class="mapbox">
+        <canvas id="mapCanvas"></canvas>
+        <div class="pop" id="pop"></div>
+        <button class="legendToggle" id="legendToggle">Legend <span id="legendChevron">&#9662;</span></button>
+        <div class="legend" id="legendPanel">
+          <div class="lt">Clusters</div>
+          <div class="lr">
+            <span style="display:inline-flex;align-items:center;justify-content:center;
+              width:15px;height:15px;border-radius:50%;background:rgba(168,122,18,.88);
+              color:#fff;font-family:'IBM Plex Mono',monospace;font-size:7px;flex-shrink:0;">12</span>
+            grouped events, always numbered &mdash; not crowd size
+          </div>
+          <div class="lsep"></div>
+          <div class="lt">Crowd size <span style="font-weight:400;text-transform:none;letter-spacing:0;">(individual events only)</span></div>
+          <div class="lr"><span class="ld" style="width:5px;height:5px;"></span>unknown</div>
+          <div class="lr"><span class="ld" style="width:8px;height:8px;"></span>10s</div>
+          <div class="lr"><span class="ld" style="width:12px;height:12px;"></span>100s</div>
+          <div class="lr"><span class="ld" style="width:17px;height:17px;"></span>1,000s</div>
+          <div class="lr"><span class="ld" style="width:22px;height:22px;"></span>10,000s</div>
+          <div class="lsep"></div>
+          <div class="lt">Valence</div>
+          <div class="lr"><span class="lv" style="background:var(--left)"></span>liberal/left</div>
+          <div class="lr"><span class="lv" style="background:var(--right)"></span>conservative/right</div>
+          <div class="lr"><span class="lv" style="background:var(--other)"></span>other</div>
+        </div>
+        <div class="zoomctl"><button id="zIn">+</button><button id="zOut">−</button></div>
+        <div class="hint">SCROLL TO ZOOM · DRAG TO PAN · HOVER FOR DETAIL</div>
+      </div>
+      <aside class="rail">
+        <div class="cb"><div class="ct">Weekly tallies of events</div><div class="cs">filtered</div><div id="chEv"></div></div>
+        <div class="cb"><div class="ct">Weekly tallies of participants</div><div class="cs">mid-range estimates</div><div id="chPa"></div></div>
+        <div class="cb"><div class="ct">Political valence composition</div><div class="cs">share of filtered events</div><div id="chVa"></div></div>
+        <div class="cb"><div class="ct">Top issues</div><div class="cs">filtered event count</div><div id="chIs"></div></div>
+        <div class="cb" style="border-bottom:none;"><div class="ct">Top states</div><div class="cs">filtered event count</div><div id="chSt"></div></div>
+      </aside>
+    </div>
+  </div>
+</div>
+
+<div class="chartTip" id="chartTip"></div>
+<div class="listBg" id="listBg">
+  <div class="listPanel">
+    <div class="listHead"><h3 id="listTitle">—</h3><div class="sub" id="listSub">—</div></div>
+    <div class="listBody" id="listBody"></div>
+    <div class="listFoot"><span id="listNote"></span><button id="listClose">Close</button></div>
+  </div>
+</div>
+
+<div class="modalBg" id="modalBg">
+  <div class="modal">
+    <button class="modalClose" id="modalClose">&times;</button>
+    <h2>About the data &amp; dashboard</h2>
+    <div class="sub">Crowd Counting Consortium &middot; Phase 3 &middot; January 2025 onward</div>
+
+    <p>The Crowd Counting Consortium (CCC) is a joint project of Harvard Kennedy School and the
+    University of Connecticut that collects publicly available data on political protest events
+    reported in the United States, including rallies, marches, demonstrations, and acts of civil
+    disobedience. This dashboard lets you explore that record: where events happened, when, what
+    they were about, and how many people took part.</p>
+
+    <p>CCC draws on a broad, continually updated set of sources: an automated crawl of print and
+    broadcast media; regular review of social media accounts run by organizers, activists and
+    independent journalists, which often surface events commercial outlets miss entirely; Google
+    News searches to catch what the crawler doesn't; periodic review of organizers' own websites
+    and calendars; and public submissions through CCC's
+    <a href="https://docs.google.com/forms/d/e/1FAIpQLSc3W_tb71fiEJhi379y0T6gttQ0f9nbb23bj8iicceLP_j8rQ/viewform"
+       target="_blank" rel="noopener" style="color:var(--gold);">online form</a>, added only once
+    the event is confirmed to have taken place.</p>
+
+    <p>Filters apply together, and the map, the figures above it and the charts on the right
+    update as one. Drag the handles under the date range to narrow the period. Numbered
+    circles group nearby events &mdash; click one to zoom in. When the ring around one turns teal,
+    every event inside it shares one exact location (including the territory panels along the
+    bottom), so zooming further won't separate them &mdash; click to open a list instead.
+    Individual points are coloured by political valence and sized by crowd size; hover one for its
+    date, size, claim and sources. The Legend button in the map's top-right corner explains these
+    symbols.</p>
+
+    <h3>Reading the numbers</h3>
+    <ul>
+      <li><strong>Crowd size is recorded for about 30% of events</strong>, and not at random &mdash;
+      larger, more widely covered gatherings are far more likely to have an estimate. The
+      participant total sums only those events; the coverage figure beside it shows what share of
+      the current selection it rests on.</li>
+      <li><strong>Events are located to their city or town</strong>, not a street address, so many
+      events in the same place share identical coordinates.</li>
+      <li><strong>Absence of events isn't evidence of absence.</strong> The record depends on what
+      the sources above surfaced. Know of something missing or wrong? CCC accepts corrections
+      through the submission form above.</li>
+    </ul>
+
+    <h3>Getting the data</h3>
+    <p>The full dataset and its codebook are published openly on Harvard Dataverse, along with the
+    earlier phases covering 2017&ndash;2024, which are not shown here.</p>
+    <p>If you use the data in published work, please cite the Crowd Counting Consortium as the
+    source. Each dataset version on Dataverse carries its own DOI &mdash; see the Dataverse page
+    for the one matching the version you used.</p>
+    <p><a href="https://ash.harvard.edu/programs/crowd-counting-consortium/"
+       target="_blank" rel="noopener" style="color:var(--gold);">More about the project at the Ash Center</a></p>
+    <p><a href="https://dataverse.harvard.edu/dataverse/crowdcountingconsortium"
+       target="_blank" rel="noopener"
+       style="color:var(--gold);">Download the data from Harvard Dataverse</a>
+       <span style="color:var(--soft);">&mdash; all three phases, with codebooks</span></p>
+    <p style="font-size:12px;color:var(--soft);margin-top:18px;">This dashboard was created with the assistance of Claude, primarily Claude Opus 5.5.</p>
+  </div>
+</div>
+
+<script>
+let DATA=null;
+const PROV="SOURCE: CROWD COUNTING CONSORTIUM, PHASE 3 PUBLIC DATASET.";
+let US_STATES=null;
+const VC=['#4A6E9E','#B85C4A','#8A8578'];
+const VNAME=['liberal/left','conservative/right','other'];
+const MS=864e5;
+let ISSUES,TYPES,CLAIMS,LOCS,SRCS,DAY0,D,T0,T1,S;
+let rA,rB,dFi,dTi;                      // assigned in buildControls()
+const iso=t=>new Date(t).toISOString().slice(0,10);
+
+function initData(){
+  ISSUES=DATA.issues; TYPES=DATA.types;
+  CLAIMS=DATA.claimDict; LOCS=DATA.locDict; SRCS=DATA.srcDict;
+  DAY0=new Date(DATA.day0+'T00:00:00');
+  D=DATA.rows.map(r=>({
+    d:r[0], lat:r[1], lon:r[2], st:r[3], val:r[4], ty:r[5], iss:r[6],
+    size:r[7], scat:r[8], f:r[9], claim:r[10], loc:r[11], src:r[12], nsrc:r[13],
+    t:DAY0.getTime()+r[0]*MS, p:null
+  }));
+  T0=D[0].t; T1=D[D.length-1].t;
+  S={from:T0,to:T1,issues:new Set(),valence:new Set(),
+     types:new Set(),
+     arrests:false,damage:false,pInj:false,polInj:false,online:false,claim:''};
+  buildControls();
+}
+function lastDate(){
+  return new Date(T1).toISOString().slice(0,10);
+}
+
+function ok(r){
+  if(r.t<S.from||r.t>S.to)return false;
+  if(S.valence.size&&!S.valence.has(r.val))return false;
+  if(S.types.size&&!S.types.has(r.ty))return false;
+  if(S.issues.size){let hit=false;for(const i of r.iss)if(S.issues.has(i)){hit=true;break;}if(!hit)return false;}
+  if(S.arrests&&!(r.f&1))return false;
+  if(S.damage&&!(r.f&2))return false;
+  if(S.pInj&&!(r.f&4))return false;
+  if(S.polInj&&!(r.f&8))return false;
+  if(!S.online&&(r.f&16))return false;
+  if(S.claim&&!CLAIMS[r.claim].toLowerCase().includes(S.claim))return false;
+  return true;
+}
+function F(){const o=[];for(const r of D)if(ok(r))o.push(r);return o;}
+
+/* ---------- map ---------- */
+const cv=document.getElementById('mapCanvas'),ctx=cv.getContext('2d');
+const popEl=document.getElementById('pop');
+let W=0,H=0,dpr=window.devicePixelRatio||1;
+let projection=null,pathGen=null,statesFC=null;
+let PLACES=[],ROADS=[];      // background reference layer
+let placesProj=[],roadsProj=[],stateLabelsProj=[];   // projected once per resize, cheap to reuse every frame
+const RANK_MIN_K={0:1,1:1.4,2:1.8,3:2.5,4:3.5,6:5,7:8,8:13};  // zoom a city's label appears at
+const ROADS_MIN_K=1.3;       // roads/labels stay off at the national overview
+let transform=d3.zoomIdentity, visible=[], drawn=[];
+
+// d3.geoAlbersUsa() covers only the 50 states + DC and returns null for
+// Puerto Rico, Guam, the Virgin Islands and American Samoa. Without insets
+// those events vanish from the map with no warning, so each territory gets
+// its own small projection drawn in a fixed panel along the bottom edge.
+// Each panel lists the territories it can hold. A territory whose code never
+// appears in the data is dropped from the panel's outline and label at build
+// time, so nothing empty is drawn — but it stays in `states`, so if a future
+// refresh does contain one, its events are routed here instead of vanishing.
+const INSETS=[
+  {key:'PRVI', states:['PR','VI'],
+   members:[{code:'PR',name:'Puerto Rico'},
+            {code:'VI',name:'United States Virgin Islands'}]},
+  {key:'GUMP', states:['GU','MP'],
+   members:[{code:'GU',name:'Guam'},
+            {code:'MP',name:'Commonwealth of the Northern Mariana Islands'}]},
+  {key:'AS',   states:['AS'],
+   members:[{code:'AS',name:'American Samoa'}]}
+];
+// keep only the territories actually represented in this build of the data
+function resolveInsetMembers(){
+  const present=new Set(D.map(r=>r.st));
+  for(const ins of INSETS){
+    const live=ins.members.filter(m=>present.has(m.code));
+    ins.liveMembers=live;
+    ins.names=live.map(m=>m.name);
+    // Single-territory panels (Guam, American Samoa) always get the full
+    // name — there's room. Multi-territory panels (Puerto Rico + Virgin
+    // Islands sharing one box) fall back to codes if the full names don't
+    // actually fit; checked against the real rendered width at draw time,
+    // not guessed from character counts.
+    ins.labelFull=live.map(m=>m.name).join(' \u00b7 ');
+    ins.labelCode=live.map(m=>m.code).join(' \u00b7 ');
+    ins.label=ins.labelCode;   // draw() overwrites this once it knows the panel width
+  }
+}
+const INSET_W=104, INSET_H=64, INSET_PAD=9;
+let shownInsets=[];
+
+function sizeCanvas(){
+  const r=cv.parentElement.getBoundingClientRect();
+  W=r.width;H=r.height;
+  cv.width=W*dpr;cv.height=H*dpr;cv.style.width=W+'px';cv.style.height=H+'px';
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+
+  const mainFC={type:'FeatureCollection',
+    features:statesFC.features.filter(f=>!INSETS.some(i=>i.names.includes(f.properties.name)))};
+  projection=d3.geoAlbersUsa().fitExtent([[12,12],[W-12,H-INSET_H-26]],mainFC);
+  pathGen=d3.geoPath(projection,ctx);
+
+  for(const ins of INSETS)
+    ins.fc={type:'FeatureCollection',
+      features:statesFC.features.filter(f=>ins.names.includes(f.properties.name))};
+  layoutInsets(INSETS.slice());   // provisional; render() narrows it to non-empty ones
+
+  for(const r of D){
+    const ins=INSETS.find(i=>i.states.includes(r.st));
+    r.inset = ins || null;
+  }
+  projectAll();
+
+  // Reference layer: project once here (cheap, runs only on resize), then
+  // every draw() frame just re-applies the current pan/zoom transform to
+  // these cached points instead of re-running d3's projection per frame.
+  placesProj = PLACES.map(p=>({name:p[0],rank:p[3],pt:projection([p[2],p[1]])}))
+                      .filter(p=>p.pt);
+  roadsProj = ROADS.map(r=>({pts:r.p.map(([lat,lon])=>projection([lon,lat])).filter(Boolean)}))
+                    .filter(r=>r.pts.length>=2);
+
+  // State names, from the same boundary file already used for the map fill —
+  // no extra data needed. geoCentroid can land outside a concave state (e.g.
+  // Florida's panhandle pulls its centroid oddly), so a couple of names are
+  // manually nudged toward where a reader actually expects to see them.
+  const NUDGE={'Florida':[0,-1.1],'Louisiana':[0.6,0],'Michigan':[-1.2,0.3]};
+  stateLabelsProj = mainFC.features.map(f=>{  // the LOCAL object computed just above, not the cached helper
+    let c=d3.geoCentroid(f);
+    const nx=NUDGE[f.properties.name];
+    if(nx) c=[c[0]+nx[0], c[1]+nx[1]];
+    return {name:f.properties.name, pt:projection(c)};
+  }).filter(s=>s.pt);
+}
+
+// Panels are laid out left-to-right and only for territories that actually have
+// events in the current filter, so an empty box never occupies space.
+function layoutInsets(active){
+  shownInsets=active;
+  let x=12;
+  for(const ins of active){
+    ins.box={x:x,y:H-INSET_H-10,w:INSET_W,h:INSET_H};
+    ins.proj=d3.geoMercator().fitExtent(
+      [[ins.box.x+5,ins.box.y+13],[ins.box.x+ins.box.w-5,ins.box.y+ins.box.h-5]],ins.fc);
+    if(!isFinite(ins.proj.scale())){
+      // degenerate outline (a single point): centre on it at a fixed scale so
+      // the events still appear instead of projecting to NaN
+      const b=d3.geoBounds(ins.fc);
+      ins.proj=d3.geoMercator()
+        .center([(b[0][0]+b[1][0])/2,(b[0][1]+b[1][1])/2])
+        .scale(4000)
+        .translate([ins.box.x+ins.box.w/2, ins.box.y+ins.box.h/2+4]);
+      console.warn('inset '+ins.key+': outline has no extent, using fallback projection');
+    }
+    ins.path=d3.geoPath(ins.proj,ctx);
+    x+=INSET_W+INSET_PAD;
+  }
+}
+function projectAll(){
+  for(const r of D){
+    if(r.inset){ r.p = shownInsets.includes(r.inset) ? r.inset.proj([r.lon,r.lat]) : null; }
+    else       { r.p = projection([r.lon,r.lat]); }
+  }
+}
+function crowdR(scat){return [2.6,4.2,6.2,9,13][scat]||2.6;}
+
+let _mainFC=null;
+function mainFC(){
+  if(!_mainFC) _mainFC={type:'FeatureCollection',
+    features:statesFC.features.filter(f=>!INSETS.some(i=>i.names.includes(f.properties.name)))};
+  return _mainFC;
+}
+// Roads and city labels: a quiet grey backdrop, never competing with the
+// event data drawn on top of it. Off at the national overview (ROADS_MIN_K)
+// so the busiest, most zoomed-out view stays uncluttered and cheap to
+// redraw; city labels fade in individually by importance as you zoom
+// further, the same way a printed atlas adds smaller towns at larger scales.
+// Draws each letter separately with a gap between them — canvas has no
+// letter-spacing property, so this is the standard way to get the wide,
+// tracked-out look atlases use for place names.
+function fillTextSpaced(text,cx,cy,spacing){
+  ctx.textAlign='left';
+  const widths=[...text].map(ch=>ctx.measureText(ch).width);
+  const total=widths.reduce((a,b)=>a+b,0)+spacing*(text.length-1);
+  let x=cx-total/2;
+  for(let i=0;i<text.length;i++){ ctx.fillText(text[i],x,cy); x+=widths[i]+spacing; }
+}
+
+function drawReferenceLayer(){
+  // State names read at any zoom — unlike roads, they're cheap (56 labels,
+  // not thousands of line segments) and a labelled map reads as "finished"
+  // even at the very first view, the way the CARTO reference does.
+  ctx.save();
+  ctx.font="500 12px 'Public Sans',sans-serif";
+  ctx.textBaseline='middle';
+  const stateFade=1-Math.min(Math.max(transform.k-4,0)/4,1);  // recede once you're viewing part of one state
+  for(const st of stateLabelsProj){
+    const x=transform.applyX(st.pt[0]), y=transform.applyY(st.pt[1]);
+    if(x<-60||x>W+60||y<-20||y>H+20) continue;
+    ctx.globalAlpha=0.5*stateFade;
+    ctx.fillStyle='#B9B2A0';
+    fillTextSpaced(st.name.toUpperCase(),x,y,1.4);
+  }
+  ctx.restore();
+
+  if(transform.k<ROADS_MIN_K) return;
+  const fade=Math.min((transform.k-ROADS_MIN_K)/1.2,1);  // ease in rather than pop on
+
+  ctx.save();
+  ctx.strokeStyle='#E4DFD0';  // lighter than the state-boundary grey (#D8D3C7), stays
+  ctx.lineWidth=1;             // distinguishable from it even after alpha blending
+  ctx.globalAlpha=0.65*fade;
+  ctx.lineJoin='round';ctx.lineCap='round';
+  for(const road of roadsProj){
+    const p0=road.pts[0];
+    const sx0=transform.applyX(p0[0]), sy0=transform.applyY(p0[1]);
+    let onScreen = sx0>=-40&&sx0<=W+40&&sy0>=-40&&sy0<=H+40;
+    if(!onScreen){
+      for(let i=1;i<road.pts.length && !onScreen;i++){
+        const sx=transform.applyX(road.pts[i][0]), sy=transform.applyY(road.pts[i][1]);
+        if(sx>=-40&&sx<=W+40&&sy>=-40&&sy<=H+40) onScreen=true;
+      }
+      if(!onScreen) continue;
+    }
+    ctx.beginPath();
+    ctx.moveTo(transform.applyX(p0[0]),transform.applyY(p0[1]));
+    for(let i=1;i<road.pts.length;i++)
+      ctx.lineTo(transform.applyX(road.pts[i][0]),transform.applyY(road.pts[i][1]));
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // Bigger cities read in a larger, bolder face; small towns stay quiet.
+  // This is the single biggest thing a real atlas does that a flat font
+  // size doesn't: it lets you tell New York from a county seat at a glance.
+  const CITY_STYLE={
+    0:{size:13,weight:600,dot:2.1}, 1:{size:12,weight:600,dot:1.9},
+    2:{size:11.5,weight:500,dot:1.7}, 3:{size:11,weight:500,dot:1.5},
+    4:{size:10.5,weight:500,dot:1.4}, 6:{size:10,weight:400,dot:1.2},
+    7:{size:9.5,weight:400,dot:1.1}, 8:{size:9,weight:400,dot:1}
+  };
+  ctx.textAlign='left';ctx.textBaseline='middle';
+  for(const p of placesProj){
+    const minK=RANK_MIN_K[p.rank]!=null?RANK_MIN_K[p.rank]:99;
+    if(transform.k<minK) continue;
+    const x=transform.applyX(p.pt[0]), y=transform.applyY(p.pt[1]);
+    if(x<-20||x>W+20||y<-20||y>H+20) continue;
+    const localFade=Math.min((transform.k-minK)/0.6,1);
+    const st=CITY_STYLE[p.rank]||CITY_STYLE[8];
+    ctx.save();
+    ctx.globalAlpha=0.85*localFade;
+    ctx.font=st.weight+" "+st.size+"px 'Public Sans',sans-serif";
+    ctx.fillStyle='#9BA3AC';
+    ctx.beginPath();ctx.arc(x,y,st.dot,0,6.2832);ctx.fill();
+    ctx.fillText(p.name,x+st.dot+2.5,y);
+    ctx.restore();
+  }
+  ctx.restore();
+}
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='#EDEAE2';ctx.fillRect(0,0,W,H);
+  // mainland, under the zoom transform
+  ctx.save();
+  ctx.translate(transform.x,transform.y);ctx.scale(transform.k,transform.k);
+  ctx.beginPath();pathGen(mainFC());
+  ctx.fillStyle='#F7F5EF';ctx.fill();
+  // Dashed and warm-toned, not just a lighter grey — so a state line reads as
+  // "boundary" even where it runs parallel to a road, without relying on the
+  // reader distinguishing two similar shades of grey. Kept distinctly duller
+  // than the right-wing valence red used on event points, so the two never
+  // get confused with each other.
+  ctx.lineWidth=0.7/transform.k;
+  ctx.strokeStyle='#C9A79A';
+  ctx.setLineDash([4/transform.k, 3/transform.k]);
+  ctx.stroke();
+  ctx.restore();
+
+  drawReferenceLayer();
+
+  // territory insets: fixed panels, not affected by pan/zoom
+  for(const ins of shownInsets){
+    const b=ins.box;
+    ctx.save();
+    ctx.beginPath();ctx.rect(b.x,b.y,b.w,b.h);
+    ctx.fillStyle='#EDEAE2';ctx.fill();
+    ctx.lineWidth=1;ctx.strokeStyle='#D8D3C7';ctx.stroke();
+    ctx.beginPath();ins.path(ins.fc);
+    ctx.fillStyle='#F7F5EF';ctx.fill();
+    ctx.lineWidth=0.5;ctx.strokeStyle='#D8D3C7';ctx.stroke();
+    ctx.font="500 8.5px 'IBM Plex Mono',monospace";
+    ctx.textAlign='left';ctx.textBaseline='top';
+    ctx.fillStyle='#5B6670';
+    const avail=b.w-8;
+    const label=(ins.liveMembers.length<=1 || ctx.measureText(ins.labelFull).width<=avail)
+      ? ins.labelFull : ins.labelCode;
+    ctx.fillText(label,b.x+5,b.y+4);   // count now sits on the bubble itself
+    ctx.restore();
+  }
+
+  const pts=[];
+  for(const r of visible){
+    if(!r.p)continue;
+    let x,y;
+    if(r.inset){ x=r.p[0]; y=r.p[1]; }          // fixed panel
+    else { x=transform.applyX(r.p[0]); y=transform.applyY(r.p[1]); }
+    if(x<-40||x>W+40||y<-40||y>H+40)continue;
+    pts.push({r,x,y});
+  }
+  const CELL=30,bins=new Map();
+  for(const p of pts){
+    // Inset panels are only ~100px wide, so position within a territory carries
+    // no real information. Group those by territory code instead of by screen
+    // cell, so each one reads as a single counted bubble.
+    const k = p.r.inset ? 'T'+p.r.st
+                        : 'M'+((p.x/CELL)|0)+'_'+((p.y/CELL)|0);
+    let b=bins.get(k); if(b)b.push(p); else bins.set(k,[p]);
+  }
+  drawn=[];
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  for(const [key,g] of bins){
+    const isInset=key.charCodeAt(0)===84;      // 'T'
+    if(g.length>=4 || (isInset && g.length>=2)){  // a lone territory event is just a point, not a cluster
+      let sx=0,sy=0,mnx=1e9,mxx=-1e9,mny=1e9,mxy=-1e9;
+      for(const p of g){sx+=p.x;sy+=p.y;
+        if(p.x<mnx)mnx=p.x; if(p.x>mxx)mxx=p.x;
+        if(p.y<mny)mny=p.y; if(p.y>mxy)mxy=p.y;}
+      const cx=sx/g.length,cy=sy/g.length;
+      const stack=isInset || Math.max(mxx-mnx,mxy-mny)<4;  // one location, or a whole territory
+      const rad=Math.min(11+Math.log10(Math.max(g.length,1))*7,27);
+      ctx.beginPath();ctx.arc(cx,cy,rad,0,6.2832);
+      ctx.fillStyle='rgba(168,122,18,.88)';ctx.fill();
+      ctx.lineWidth=stack?2:1.5;ctx.strokeStyle=stack?'#3B6E5E':'#EDEAE2';ctx.stroke();
+      ctx.fillStyle='#fff';
+      ctx.font='500 '+(g.length>999?9.5:11)+'px "IBM Plex Mono",monospace';
+      ctx.fillText(g.length>999?(g.length/1000).toFixed(1)+'k':g.length,cx,cy+.5);
+      drawn.push({c:1,x:cx,y:cy,rad,n:g.length,g,stack});
+    }else{
+      for(const p of g){
+        const rad=crowdR(p.r.scat);
+        ctx.beginPath();ctx.arc(p.x,p.y,rad,0,6.2832);
+        ctx.fillStyle=VC[p.r.val];ctx.globalAlpha=.75;ctx.fill();ctx.globalAlpha=1;
+        ctx.lineWidth=1;ctx.strokeStyle='#EDEAE2';ctx.stroke();
+        drawn.push({c:0,x:p.x,y:p.y,rad:Math.max(rad,5),row:p.r});
+      }
+    }
+  }
+}
+const zoom=d3.zoom().scaleExtent([1,60])
+  .on('start',()=>cv.classList.add('drag'))
+  .on('end',()=>cv.classList.remove('drag'))
+  .on('zoom',ev=>{transform=ev.transform;draw();});
+d3.select(cv).call(zoom);
+document.getElementById('zIn').onclick=()=>d3.select(cv).transition().duration(220).call(zoom.scaleBy,1.7);
+document.getElementById('zOut').onclick=()=>d3.select(cv).transition().duration(220).call(zoom.scaleBy,1/1.7);
+
+function srcLine(r){
+  if(!r.nsrc) return '<div class="m src">no source recorded</div>';
+  const names=r.src.map(i=>SRCS[i]);
+  const extra=r.nsrc-names.length;
+  return '<div class="m src">Source: '+names.join(', ')+
+    (extra>0?' +'+extra+' more':'')+'</div>';
+}
+const fmtD=t=>new Date(t).toISOString().slice(0,10);
+cv.addEventListener('mousemove',e=>{
+  const rc=cv.getBoundingClientRect(),mx=e.clientX-rc.left,my=e.clientY-rc.top;
+  let hit=null;
+  for(let i=drawn.length-1;i>=0;i--){const it=drawn[i];
+    if((mx-it.x)**2+(my-it.y)**2<=it.rad**2){hit=it;break;}}
+  if(!hit){popEl.style.display='none';return;}
+  if(hit.c){
+    let tot=0;for(const p of hit.g)tot+=p.r.size||0;
+    const place=hit.stack?LOCS[hit.g[0].r.loc]+', '+hit.g[0].r.st:'';
+    popEl.innerHTML='<div class="t">'+hit.n.toLocaleString()+' events'+
+      (hit.stack?' at '+place:'')+'</div>'+
+      '<div class="m">'+tot.toLocaleString()+' participants (where known)</div>'+
+      '<div class="m src">'+(hit.stack?'same location &mdash; click to list them'
+        :'click to zoom in')+'</div>';
+  }else{
+    const r=hit.row;
+    popEl.innerHTML='<div class="t">'+LOCS[r.loc]+', '+r.st+'</div>'+
+      '<div class="m">'+fmtD(r.t)+' · '+VNAME[r.val]+' · '+TYPES[r.ty]+'</div>'+
+      '<div class="m">'+(r.size==null?'crowd size unknown':r.size.toLocaleString()+' participants')+'</div>'+
+      (CLAIMS[r.claim]?'<div class="m">'+CLAIMS[r.claim]+'</div>':'')+
+      srcLine(r);
+  }
+  popEl.style.display='block';
+  popEl.style.left=Math.min(mx+14,W-popEl.offsetWidth-8)+'px';
+  popEl.style.top=Math.max(my-popEl.offsetHeight-10,8)+'px';
+});
+cv.addEventListener('mouseleave',()=>popEl.style.display='none');
+cv.addEventListener('click',e=>{
+  const rc=cv.getBoundingClientRect(),mx=e.clientX-rc.left,my=e.clientY-rc.top;
+  for(let i=drawn.length-1;i>=0;i--){const it=drawn[i];
+    if(it.c&&(mx-it.x)**2+(my-it.y)**2<=it.rad**2){
+      if(it.stack){openList(it.g);return;}
+      d3.select(cv).transition().duration(320).call(zoom.transform,
+        d3.zoomIdentity.translate(W/2,H/2).scale(Math.min(transform.k*2.4,60))
+          .translate(-(it.x-transform.x)/transform.k,-(it.y-transform.y)/transform.k));
+      return;}}
+});
+
+/* ---------- controls ---------- */
+function chips(el,labels,store,pre){
+  labels.forEach((v,i)=>{const c=document.createElement('div');
+    c.className='chip'+(store.has(i)?' on':'')+(pre?' v'+i:'');
+    c.textContent=v;
+    c.onclick=()=>{store.has(i)?store.delete(i):store.add(i);c.classList.toggle('on');render();};
+    el.appendChild(c);});
+}
+
+function buildControls(){
+chips(document.getElementById('issues'),ISSUES,S.issues);
+chips(document.getElementById('valence'),VNAME,S.valence,true);
+chips(document.getElementById('etypes'),TYPES,S.types);
+  // say what each bucket contains; the labels alone are ambiguous
+  const TYPE_HELP={
+    'demonstration':'Includes demonstrations, marches, rallies and vigils',
+    'counter-protest':'Gatherings held in opposition to another event',
+    'civil disobedience':'Deliberate non-violent law-breaking, such as blockades or sit-ins'};
+  const noteEl=document.getElementById('typeNote');
+  const NOTE_DEFAULT='DEMONSTRATION INCLUDES MARCHES, RALLIES AND VIGILS';
+  document.querySelectorAll('#etypes .chip').forEach(c=>{
+    const h=TYPE_HELP[c.textContent];
+    if(!h) return;
+    c.title=h;                                   // native tooltip as a fallback
+    c.addEventListener('mouseenter',()=>noteEl.textContent=h.toUpperCase());
+    c.addEventListener('mouseleave',()=>noteEl.textContent=NOTE_DEFAULT);
+  });
+const FL=[['arrests','arrests'],['damage','property damage'],
+  ['pInj','protester injuries'],['polInj','police injuries']];
+const fe=document.getElementById('flags');
+FL.forEach(([k,l])=>{const d=document.createElement('div');d.className='tg';
+  d.innerHTML='<div class="bx"></div><span>'+l+'</span>';
+  d.onclick=()=>{S[k]=!S[k];d.classList.toggle('on');render();};fe.appendChild(d);});
+const od=document.createElement('div');od.className='tg';
+od.innerHTML='<div class="bx"></div><span>Include online actions</span>';
+od.onclick=()=>{S.online=!S.online;od.classList.toggle('on');render();};
+document.getElementById('online').appendChild(od);
+const q=document.getElementById('claimQ');
+let qt=null;
+q.addEventListener('input',()=>{clearTimeout(qt);
+  qt=setTimeout(()=>{S.claim=q.value.trim().toLowerCase();render();},160);});
+document.getElementById('claimX').onclick=()=>{q.value='';S.claim='';render();};
+rA=document.getElementById('rA'); rB=document.getElementById('rB');
+dFi=document.getElementById('dF'); dTi=document.getElementById('dT');
+const p2t=p=>T0+(p/1000)*(T1-T0);
+const t2p=t=>Math.round(((t-T0)/(T1-T0))*1000);
+
+[rA,rB].forEach(e=>e.addEventListener('input',()=>{
+  let a=+rA.value,b=+rB.value;if(a>b){const z=a;a=b;b=z;}
+  S.from=p2t(a);S.to=p2t(b);render();}));
+
+// typing or picking a date moves the slider, and vice versa
+function fromInputs(){
+  const a=Date.parse(dFi.value+'T00:00:00'), b=Date.parse(dTi.value+'T23:59:59');
+  if(isNaN(a)||isNaN(b)) return;
+  S.from=Math.max(Math.min(a,b),T0);
+  S.to  =Math.min(Math.max(a,b),T1);
+  rA.value=t2p(S.from); rB.value=t2p(S.to);
+  render();
+}
+dFi.addEventListener('change',fromInputs);
+dTi.addEventListener('change',fromInputs);
+document.getElementById('reset').onclick=()=>{
+  S.from=T0;S.to=T1;
+  // mutate the existing Sets: the chip handlers hold references to them,
+  // so replacing them would silently detach every chip
+  S.issues.clear();
+  S.valence.clear();
+  S.types.clear();
+  S.arrests=S.damage=S.pInj=S.polInj=S.online=false;S.claim='';q.value='';
+  rA.value=0;rB.value=1000;
+  dFi.value=iso(T0);dTi.value=iso(T1);
+  document.querySelectorAll('#issues .chip,#valence .chip,#etypes .chip').forEach(c=>c.classList.remove('on'));
+  document.querySelectorAll('.tg').forEach(t=>t.classList.remove('on'));
+  render();};
+}
+
+/* ---------- sparkline ---------- */
+function spark(){
+  const c2=document.getElementById('spark');
+  const w=c2.clientWidth,h=30;c2.width=w*dpr;c2.height=h*dpr;
+  const c=c2.getContext('2d');c.setTransform(dpr,0,0,dpr,0,0);c.clearRect(0,0,w,h);
+  const B={};for(const r of D){const k=(r.d/7)|0;B[k]=(B[k]||0)+1;}
+  const ks=Object.keys(B).map(Number).sort((a,b)=>a-b);
+  if(!ks.length)return;
+  const mx=Math.max.apply(null,Object.values(B)),bw=w/ks.length;
+  // weeks inside the current range are gold, the rest grey: the selection
+  // is visible on the histogram itself, not only in the handle positions
+  const fromW=(S?((S.from-T0)/MS/7):0), toW=(S?((S.to-T0)/MS/7):1e9);
+  ks.forEach((k,i)=>{
+    const bh=Math.max((B[k]/mx)*(h-4),1);
+    const inRange=k>=fromW-0.5 && k<=toW+0.5;
+    c.fillStyle=inRange?'rgba(168,122,18,.75)':'#DCD7CA';
+    c.fillRect(i*bw,h-bh,Math.max(bw-1,.8),bh);
+  });
+}
+
+/* ---------- charts ---------- */
+function weekLabel(k){
+  const start=new Date(DAY0.getTime()+k*7*MS);
+  const end=new Date(start.getTime()+6*MS);
+  const f=d=>d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+  return f(start)+'\u2013'+f(end)+(start.getFullYear()!==end.getFullYear()
+    ||end.getFullYear()!==new Date().getFullYear() ? ', '+end.getFullYear() : '');
+}
+function tally(sel,rows,fn,unit){
+  const el=document.querySelector(sel);el.innerHTML='';
+  const w=el.clientWidth,h=74,m={t:5,r:3,b:15,l:34};
+  const B=new Map();
+  for(const r of rows){const k=(r.d/7)|0;B.set(k,(B.get(k)||0)+fn(r));}
+  const ks=[...B.keys()].sort((a,b)=>a-b);
+  if(!ks.length){el.innerHTML='<div style="font-size:11px;color:var(--soft);padding:14px 0;">No events match filters</div>';return;}
+  const data=ks.map(k=>({k,v:B.get(k)}));
+  const svg=d3.select(el).append('svg').attr('width',w).attr('height',h);
+  const x=d3.scaleBand().domain(ks).range([m.l,w-m.r]).padding(.12);
+  const y=d3.scaleLinear().domain([0,d3.max(data,d=>d.v)*1.1]).range([h-m.b,m.t]);
+  svg.append('g').attr('class','axis').attr('transform','translate('+m.l+',0)')
+    .call(d3.axisLeft(y).ticks(3).tickFormat(d3.format('~s')));
+  const tickIdx=ks.filter((d,i)=>i%Math.ceil(ks.length/4)===0);
+  svg.append('g').attr('class','axis').attr('transform','translate(0,'+(h-m.b)+')')
+    .call(d3.axisBottom(x).tickValues(tickIdx)
+      .tickFormat(k=>{const dt=new Date(DAY0.getTime()+k*7*MS);
+        return dt.toLocaleDateString('en-US',{month:'short',year:'2-digit'});}));
+  svg.selectAll('rect.b').data(data).enter().append('rect')
+    .attr('class','b')
+    .attr('x',d=>x(d.k)).attr('y',d=>y(d.v)).attr('width',Math.max(x.bandwidth(),1))
+    .attr('height',d=>h-m.b-y(d.v)).attr('fill','#A87A12').attr('opacity',.82)
+    .style('cursor','default')
+    .on('mouseenter',function(ev,d){
+      d3.select(this).attr('opacity',1);
+      chartTip.innerHTML='<div class="t">'+weekLabel(d.k)+'</div>'+
+        '<div class="m">'+d.v.toLocaleString()+' '+unit+'</div>';
+      chartTip.style.display='block';
+      positionChartTip(ev);
+    })
+    .on('mousemove',positionChartTip)
+    .on('mouseleave',function(){
+      d3.select(this).attr('opacity',.82);
+      chartTip.style.display='none';
+    })
+    // Touch has no hover state, so a tap shows the same tooltip a mouseenter
+    // would. No preventDefault here — the chart sits inside a scrollable
+    // rail on mobile, and blocking the default touch behaviour would block
+    // that scroll too.
+    .on('touchstart',function(ev,d){
+      d3.select(this).attr('opacity',1);
+      chartTip.innerHTML='<div class="t">'+weekLabel(d.k)+'</div>'+
+        '<div class="m">'+d.v.toLocaleString()+' '+unit+'</div>';
+      chartTip.style.display='block';
+      positionChartTip(ev);
+    });
+}
+function positionChartTip(ev){
+  const pt=ev.touches&&ev.touches[0]?ev.touches[0]:ev;
+  const pw=chartTip.offsetWidth,ph=chartTip.offsetHeight;
+  let x=pt.clientX+14,y=pt.clientY-ph-10;
+  if(x+pw>window.innerWidth-8) x=pt.clientX-pw-14;
+  if(y<8) y=pt.clientY+16;
+  chartTip.style.left=x+'px'; chartTip.style.top=y+'px';
+}
+function valBar(rows){
+  const el=document.getElementById('chVa');el.innerHTML='';
+  const w=el.clientWidth,h=26,C=[0,0,0];
+  for(const r of rows)C[r.val]++;
+  const tot=rows.length||1;
+  const svg=d3.select(el).append('svg').attr('width',w).attr('height',h);
+  let xo=0;
+  C.forEach((n,i)=>{const bw=(n/tot)*w;
+    svg.append('rect').attr('x',xo).attr('width',bw).attr('height',13)
+      .attr('fill',VC[i]).attr('opacity',.85);
+    if(bw>26)svg.append('text').attr('x',xo+bw/2).attr('y',24).attr('text-anchor','middle')
+      .style('font-family',"'IBM Plex Mono',monospace").style('font-size','9px')
+      .style('fill','#5B6670').text(Math.round(n/tot*100)+'%');
+    xo+=bw;});
+}
+function bars(elId,pairs){
+  const el=document.getElementById(elId);el.innerHTML='';
+  if(!pairs.length){el.innerHTML='<div style="font-size:11px;color:var(--soft);">No events match filters</div>';return;}
+  const mx=pairs[0][1];
+  for(const [lab,n] of pairs){
+    const d=document.createElement('div');d.className='br';
+    // label sits above its bar so long issue names are never truncated
+    d.innerHTML='<div class="brtop"><span class="bl" title="'+lab+'">'+lab+'</span>'+
+      '<span class="bvv">'+n.toLocaleString()+'</span></div>'+
+      '<div class="bt"><div class="bf" style="width:'+(n/mx*100).toFixed(1)+'%"></div></div>';
+    el.appendChild(d);}
+}
+
+/* ---------- render ---------- */
+const fmtLong=t=>new Date(t).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+function render(){
+  visible=F();
+  // show a territory panel only when the current filter puts events in it
+  const need=INSETS.filter(ins=>visible.some(r=>r.inset===ins));
+  if(need.length!==shownInsets.length || need.some((x,i)=>x!==shownInsets[i])){
+    layoutInsets(need);
+    projectAll();
+  }
+  let tot=0;const known=[];
+  const stC=new Map(),isC=new Map();
+  for(const r of visible){
+    if(r.size!=null){tot+=r.size;known.push(r.size);}
+    stC.set(r.st,(stC.get(r.st)||0)+1);
+    for(const i of r.iss)isC.set(i,(isC.get(i)||0)+1);
+  }
+  known.sort((a,b)=>a-b);
+  document.getElementById('sEv').textContent=visible.length.toLocaleString();
+  document.getElementById('sPa').textContent=tot.toLocaleString();
+  document.getElementById('sMd').textContent=visible.length?(known.length/visible.length*100).toFixed(0)+'%':'—';
+  document.getElementById('sSt').textContent=stC.size;
+  dFi.value=iso(S.from); dTi.value=iso(S.to);
+  draw();
+  spark();
+  tally('#chEv',visible,()=>1,'events');
+  tally('#chPa',visible,r=>r.size||0,'participants');
+  valBar(visible);
+  bars('chSt',[...stC.entries()].sort((a,b)=>b[1]-a[1]).slice(0,8));
+  bars('chIs',[...isC.entries()].map(([i,n])=>[ISSUES[i],n]).sort((a,b)=>b[1]-a[1]).slice(0,8));
+}
+/* ---------- stacked-cluster list + About panel ---------- */
+const lb=document.getElementById('listBg');
+const chartTip=document.getElementById('chartTip');
+document.addEventListener('touchstart',e=>{
+  if(!e.target.closest('rect.b')) chartTip.style.display='none';
+},{passive:true});
+// ---- mobile filter drawer ----
+const sideEl=document.querySelector('.side');
+const backdrop=document.getElementById('sideBackdrop');
+const openDrawer=()=>{sideEl.classList.add('open');backdrop.classList.add('open');};
+const closeDrawer=()=>{sideEl.classList.remove('open');backdrop.classList.remove('open');};
+document.getElementById('filterToggle').onclick=openDrawer;
+document.getElementById('sideClose').onclick=closeDrawer;
+backdrop.addEventListener('click',closeDrawer);
+// picking a filter closes the drawer so the map is visible again
+sideEl.addEventListener('click',e=>{
+  if(e.target.closest('.chip,.tg,input[type=range],#reset')) closeDrawer();
+});
+
+// iOS/Android address-bar chrome makes 100vh unreliable; measure the real
+// viewport height and keep it current as the browser UI shows/hides.
+function setVH(){
+  document.documentElement.style.setProperty('--vh', (window.innerHeight*0.01)+'px');
+}
+setVH();
+window.addEventListener('resize', setVH);
+window.addEventListener('orientationchange', ()=>setTimeout(setVH,150));
+
+// ---- legend: collapsed by default so it never covers the map ----
+const legendPanel=document.getElementById('legendPanel');
+const legendToggle=document.getElementById('legendToggle');
+legendToggle.onclick=()=>{
+  legendPanel.classList.toggle('open');
+  legendToggle.style.display=legendPanel.classList.contains('open')?'none':'block';
+};
+const legendChevron=document.getElementById('legendChevron');
+// clicking the map itself (not the panel) closes it again
+cv.addEventListener('click',()=>{
+  if(legendPanel.classList.contains('open')){
+    legendPanel.classList.remove('open'); legendToggle.style.display='block';
+  }
+},true);
+
+const mb=document.getElementById('modalBg');
+const MAXLIST=300;
+function openList(g){
+  const rows=g.map(p=>p.r).sort((a,b)=>b.t-a.t);
+  const r0=rows[0];
+  document.getElementById('listTitle').textContent=LOCS[r0.loc]+', '+r0.st;
+  let tot=0,known=0;
+  for(const r of rows){if(r.size!=null){tot+=r.size;known++;}}
+  document.getElementById('listSub').textContent=
+    rows.length.toLocaleString()+' events · '+tot.toLocaleString()+
+    ' participants across '+known.toLocaleString()+' with estimates';
+  const body=document.getElementById('listBody');
+  body.innerHTML='';
+  const shown=rows.slice(0,MAXLIST);
+  const frag=document.createDocumentFragment();
+  for(const r of shown){
+    const d=document.createElement('div');d.className='ev';
+    const names=r.src.map(i=>SRCS[i]);
+    const extra=r.nsrc-names.length;
+    d.innerHTML='<div class="top"><span class="dt">'+fmtD(r.t)+'</span>'+
+      '<span class="sz">'+(r.size==null?'size unknown':r.size.toLocaleString()+' participants')+'</span></div>'+
+      (CLAIMS[r.claim]?'<div class="cl">'+CLAIMS[r.claim]+'</div>':'')+
+      '<div class="mt"><span class="vd" style="background:'+VC[r.val]+'"></span>'+
+      VNAME[r.val]+' · '+TYPES[r.ty]+
+      (r.nsrc?' · '+names.join(', ')+(extra>0?' +'+extra:''):'')+'</div>';
+    frag.appendChild(d);
+  }
+  body.appendChild(frag);
+  body.scrollTop=0;
+  document.getElementById('listNote').textContent=
+    rows.length>MAXLIST?('showing first '+MAXLIST+' of '+rows.length.toLocaleString()+', newest first')
+                       :(rows.length+' event'+(rows.length===1?'':'s')+', newest first');
+  lb.classList.add('open');
+}
+document.getElementById('listClose').onclick=()=>lb.classList.remove('open');
+lb.addEventListener('click',e=>{if(e.target===lb)lb.classList.remove('open');});
+document.getElementById('aboutBtn').onclick=()=>mb.classList.add('open');
+document.getElementById('modalClose').onclick=()=>mb.classList.remove('open');
+mb.addEventListener('click',e=>{if(e.target===mb)mb.classList.remove('open');});
+addEventListener('keydown',e=>{if(e.key==='Escape'){mb.classList.remove('open');lb.classList.remove('open');}});
+
+async function boot(){
+  const el=document.getElementById('loading');
+  try{
+    // roads/places are a background reference layer, not core data —
+    // if either fails to load the map still works fine without them
+    const [geo,data,places,roads]=await Promise.all([
+      fetch('data/us-states.json').then(r=>{if(!r.ok)throw new Error('us-states.json '+r.status);return r.json();}),
+      fetch('data/ccc-dashboard.json').then(r=>{if(!r.ok)throw new Error('ccc-dashboard.json '+r.status);return r.json();}),
+      fetch('data/us-places.json').then(r=>r.ok?r.json():[]).catch(()=>[]),
+      fetch('data/us-roads.json').then(r=>r.ok?r.json():[]).catch(()=>[])
+    ]);
+    US_STATES=geo; DATA=data; PLACES=places; ROADS=roads;
+    statesFC=US_STATES; _mainFC=null;
+    initData();
+    resolveInsetMembers();
+    dFi.min=dTi.min=iso(T0); dFi.max=dTi.max=iso(T1);
+    document.getElementById('brandSub').textContent=
+      DATA.rows.length.toLocaleString()+' events · '+DATA.day0+' to '+lastDate();
+    document.getElementById('provenance').innerHTML=
+      PROV+'<br>UPDATED '+(DATA.built||'—').toUpperCase()+'.';
+    sizeCanvas(); spark(); render();
+    el.style.display='none';
+    mb.classList.add('open');
+  }catch(err){
+    el.innerHTML='<div style="text-align:center;max-width:420px;line-height:1.7;">'+
+      'Could not load the data files.<br><br>'+
+      '<span style="color:#B85C4A;">'+err.message+'</span><br><br>'+
+      'This page must be served over http, not opened as a file. '+
+      'Run a local server in this folder, or view it on the published site.</div>';
+    console.error(err);
+  }
+}
+boot();
+addEventListener('resize',()=>{dpr=window.devicePixelRatio||1;sizeCanvas();spark();render();});
+</script>
+</body>
+</html>
