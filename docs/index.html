@@ -162,6 +162,8 @@
   .ev .dt{font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--soft);}
   .ev .sz{font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--gold);}
   .ev .cl{font-size:13px;margin-top:3px;line-height:1.45;}
+  .more{color:var(--soft);white-space:nowrap;}
+  mark.hit{background:rgba(168,122,18,.24);color:inherit;border-radius:2px;padding:0 1px;}
   .ev .mt{font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:var(--soft);margin-top:4px;}
   .ev .vd{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;
     vertical-align:middle;}
@@ -254,7 +256,8 @@
       <div class="note" id="typeNote" style="margin-top:7px;">DEMONSTRATION INCLUDES MARCHES, RALLIES AND VIGILS</div></div>
     <div class="g"><div class="lab">Only show events with</div><div id="flags"></div></div>
     <div class="g"><div class="lab">Filter by claim text</div>
-      <div class="search"><input type="text" id="claimQ" placeholder="e.g. Gaza, immigration"><button id="claimX">✕</button></div></div>
+      <div class="search"><input type="text" id="claimQ" placeholder="e.g. Gaza, immigration"><button id="claimX">✕</button></div>
+      <div class="note" style="margin-top:7px;">Matches the start of words. Use quotes for an exact word, like "trans".</div></div>
     <div class="g"><div class="lab">Options</div><div id="online"></div></div>
     <div class="g"><button class="reset" id="reset">Reset all filters</button></div>
     <div class="g" style="border-bottom:none;">
@@ -418,8 +421,37 @@ function ok(r){
   if(S.pInj&&!(r.f&4))return false;
   if(S.polInj&&!(r.f&8))return false;
   if(!S.online&&(r.f&16))return false;
-  if(S.claim&&!CLAIMS[r.claim].toLowerCase().includes(S.claim))return false;
+  if(S.claim&&!claimHit(r.claim))return false;
   return true;
+}
+// Claim search rules:
+//  - Normally matches the start of a word, so "deport" finds "deportations"
+//    and partial typing like "immigra" finds "immigration".
+//  - Searches of three letters or fewer match whole words (plus a plural
+//    "s"), since they're usually acronyms or short words: "war" no longer
+//    picks up "warrants", and "ice" finds only ICE.
+//  - A search in quotes matches that exact word or phrase: "trans" finds
+//    trans but not transparency or transportation.
+// Each distinct claim is tested once per search and cached.
+let _hitQ = null, _hit = null;
+function claimRegex(q){
+  const quoted = /^["\u201c\u201d].*["\u201c\u201d]$/.test(q) && q.length > 2;
+  const core = q.replace(/^["\u201c\u201d]+|["\u201c\u201d]+$/g, '').trim();
+  if(!core) return null;
+  const esc = core.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const B = '(^|[^\\p{L}\\p{N}])', E = '(?=[^\\p{L}\\p{N}]|$)';
+  if(quoted) return new RegExp(B + esc + E, 'iu');
+  if(core.length <= 3) return new RegExp(B + esc + '(s|es)?' + E, 'iu');
+  return new RegExp(B + esc, 'iu');
+}
+function claimHit(i){
+  if(_hitQ !== S.claim){
+    _hitQ = S.claim;
+    const re = claimRegex(S.claim);
+    _hit = new Uint8Array(CLAIMS.length);
+    for(let k = 0; k < CLAIMS.length; k++) _hit[k] = (!re || re.test(CLAIMS[k])) ? 1 : 2;
+  }
+  return _hit[i] === 1;
 }
 function F(){const o=[];for(const r of D)if(ok(r))o.push(r);return o;}
 
@@ -639,6 +671,70 @@ function drawReferenceLayer(){
   }
   ctx.restore();
 }
+// Display version of a claim: up to three claims, then a count of the rest.
+// Splits on semicolons only. Commas also appear inside single claims
+// ("for the New York for All Act, Dignity Not Detention Act, ..."), so
+// comma-separated text (common in Phase 1) is shown as one claim rather
+// than being split in the wrong places.
+//
+// Search reads the full claim text, so a match can sit in a claim that
+// would normally be hidden behind "+N more". While a search is active the
+// claims that contain the search term are therefore shown first (still in
+// their original order) and the term is highlighted, so a result always
+// shows why it matched.
+const _claimShort = [];
+function escHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+// escape the text and wrap each match of `re` in a highlight
+function markHits(text, re){
+  const g = new RegExp(re.source, 'giu');
+  let out = '', last = 0, m;
+  while((m = g.exec(text)) !== null){
+    const s = m.index + (m[1] ? m[1].length : 0), e = m.index + m[0].length;  // skip the boundary character
+    if(e <= s){ g.lastIndex++; continue; }
+    out += escHtml(text.slice(last, s)) + '<mark class="hit">' + escHtml(text.slice(s, e)) + '</mark>';
+    last = e;
+  }
+  return out + escHtml(text.slice(last));
+}
+// shorten one very long claim, keeping the matched word in view
+function clipPart(text, re, max){
+  if(text.length <= max) return text;
+  const m = re.exec(text);
+  let s = 0;
+  if(m){ const at = m.index + (m[1] ? m[1].length : 0); s = Math.max(0, Math.min(at - 70, text.length - max)); }
+  let e = Math.min(text.length, s + max);
+  if(s > 0){ const sp = text.indexOf(' ', s); if(sp > -1 && sp - s < 25) s = sp + 1; }
+  if(e < text.length){ const sp = text.lastIndexOf(' ', e); if(sp > s + max - 25) e = sp; }
+  return (s > 0 ? '\u2026' : '') + text.slice(s, e) + (e < text.length ? '\u2026' : '');
+}
+function claimShort(i){
+  const re = S.claim ? claimRegex(S.claim) : null;
+  if(!re && _claimShort[i] !== undefined) return _claimShort[i];
+  const parts = CLAIMS[i].split(';').map(t => t.trim()).filter(Boolean);
+  let idx = parts.slice(0, 3).map((_, k) => k);
+  if(re){
+    const hits = [];
+    parts.forEach((p, k) => { if(re.test(p)) hits.push(k); });
+    if(hits.length){
+      const chosen = hits.slice(0, 3);
+      for(let k = 0; chosen.length < 3 && k < parts.length; k++) if(!chosen.includes(k)) chosen.push(k);
+      idx = chosen.sort((x, y) => x - y);
+    }
+  }
+  let text;
+  if(re){
+    text = idx.map(k => markHits(clipPart(parts[k], re, 220), re)).join('; ');
+  } else {
+    text = idx.map(k => parts[k]).join('; ');
+    // display cap for the rare very long single claim (99% are under ~310 chars)
+    if(text.length > 280){ const sp = text.lastIndexOf(' ', 280); text = text.slice(0, sp > 0 ? sp : 280) + '\u2026'; }
+    text = escHtml(text);
+  }
+  const extra = parts.length - idx.length;
+  const out = text + (extra > 0 ? ' <span class="more">+' + extra + ' more</span>' : '');
+  if(!re) _claimShort[i] = out;
+  return out;
+}
 function draw(){
   ctx.clearRect(0,0,W,H);
   ctx.fillStyle='#EDEAE2';ctx.fillRect(0,0,W,H);
@@ -763,7 +859,7 @@ cv.addEventListener('mousemove',e=>{
     popEl.innerHTML='<div class="t">'+LOCS[r.loc]+', '+r.st+'</div>'+
       '<div class="m">'+fmtD(r.t)+' · '+VNAME[r.val]+' · '+TYPES[r.ty]+'</div>'+
       '<div class="m">'+(r.size==null?'crowd size unknown':r.size.toLocaleString()+' participants')+'</div>'+
-      (CLAIMS[r.claim]?'<div class="m">'+CLAIMS[r.claim]+'</div>':'')+
+      (CLAIMS[r.claim]?'<div class="m">'+claimShort(r.claim)+'</div>':'')+
       srcLine(r);
   }
   popEl.style.display='block';
@@ -998,8 +1094,8 @@ function render(){
   tally('#chEv',visible,()=>1,'events');
   tally('#chPa',visible,r=>r.size||0,'participants');
   valBar(visible);
-  bars('chSt',[...stC.entries()].sort((a,b)=>b[1]-a[1]).slice(0,8));
-  bars('chIs',[...isC.entries()].map(([i,n])=>[ISSUES[i],n]).sort((a,b)=>b[1]-a[1]).slice(0,8));
+  bars('chSt',[...stC.entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0])).slice(0,8));
+  bars('chIs',[...isC.entries()].map(([i,n])=>[ISSUES[i],n]).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0])).slice(0,8));
 }
 /* ---------- stacked-cluster list + About panel ---------- */
 const lb=document.getElementById('listBg');
@@ -1065,7 +1161,7 @@ function openList(g){
     const extra=r.nsrc-names.length;
     d.innerHTML='<div class="top"><span class="dt">'+fmtD(r.t)+'</span>'+
       '<span class="sz">'+(r.size==null?'size unknown':r.size.toLocaleString()+' participants')+'</span></div>'+
-      (CLAIMS[r.claim]?'<div class="cl">'+CLAIMS[r.claim]+'</div>':'')+
+      (CLAIMS[r.claim]?'<div class="cl">'+claimShort(r.claim)+'</div>':'')+
       '<div class="mt"><span class="vd" style="background:'+VC[r.val]+'"></span>'+
       VNAME[r.val]+' · '+TYPES[r.ty]+
       (r.nsrc?' · '+names.join(', ')+(extra>0?' +'+extra:''):'')+'</div>';
