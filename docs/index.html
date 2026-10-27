@@ -395,7 +395,7 @@ const iso=t=>new Date(t).toISOString().slice(0,10);
 function initData(){
   ISSUES=DATA.issues; TYPES=DATA.types;
   CLAIMS=DATA.claimDict; LOCS=DATA.locDict; SRCS=DATA.srcDict;
-  DAY0=new Date(DATA.day0+'T00:00:00');
+  DAY0=new Date(DATA.day0+'T00:00:00Z');   // UTC midnight: no time-zone or DST shifts
   D=DATA.rows.map(r=>({
     d:r[0], lat:r[1], lon:r[2], st:r[3], val:r[4], ty:r[5], iss:r[6],
     size:r[7], scat:r[8], f:r[9], claim:r[10], loc:r[11], src:r[12], nsrc:r[13],
@@ -922,7 +922,7 @@ q.addEventListener('input',()=>{clearTimeout(qt);
 document.getElementById('claimX').onclick=()=>{q.value='';S.claim='';render();};
 rA=document.getElementById('rA'); rB=document.getElementById('rB');
 dFi=document.getElementById('dF'); dTi=document.getElementById('dT');
-const p2t=p=>T0+(p/1000)*(T1-T0);
+const p2t=p=>T0+Math.round((p/1000)*(T1-T0)/MS)*MS;   // snap slider to whole days
 const t2p=t=>Math.round(((t-T0)/(T1-T0))*1000);
 
 [rA,rB].forEach(e=>e.addEventListener('input',()=>{
@@ -931,7 +931,7 @@ const t2p=t=>Math.round(((t-T0)/(T1-T0))*1000);
 
 // typing or picking a date moves the slider, and vice versa
 function fromInputs(){
-  const a=Date.parse(dFi.value+'T00:00:00'), b=Date.parse(dTi.value+'T23:59:59');
+  const a=Date.parse(dFi.value+'T00:00:00Z'), b=Date.parse(dTi.value+'T00:00:00Z');
   if(isNaN(a)||isNaN(b)) return;
   S.from=Math.max(Math.min(a,b),T0);
   S.to  =Math.min(Math.max(a,b),T1);
@@ -979,9 +979,9 @@ function spark(){
 function weekLabel(k){
   const start=new Date(DAY0.getTime()+k*7*MS);
   const end=new Date(start.getTime()+6*MS);
-  const f=d=>d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
-  return f(start)+'\u2013'+f(end)+(start.getFullYear()!==end.getFullYear()
-    ||end.getFullYear()!==new Date().getFullYear() ? ', '+end.getFullYear() : '');
+  const f=d=>d.toLocaleDateString('en-US',{month:'short',day:'numeric',timeZone:'UTC'});
+  return f(start)+'\u2013'+f(end)+(start.getUTCFullYear()!==end.getUTCFullYear()
+    ||end.getUTCFullYear()!==new Date().getUTCFullYear() ? ', '+end.getUTCFullYear() : '');
 }
 function tally(sel,rows,fn,unit){
   const el=document.querySelector(sel);el.innerHTML='';
@@ -1000,7 +1000,7 @@ function tally(sel,rows,fn,unit){
   svg.append('g').attr('class','axis').attr('transform','translate(0,'+(h-m.b)+')')
     .call(d3.axisBottom(x).tickValues(tickIdx)
       .tickFormat(k=>{const dt=new Date(DAY0.getTime()+k*7*MS);
-        return dt.toLocaleDateString('en-US',{month:'short',year:'2-digit'});}));
+        return dt.toLocaleDateString('en-US',{month:'short',year:'2-digit',timeZone:'UTC'});}));
   svg.selectAll('rect.b').data(data).enter().append('rect')
     .attr('class','b')
     .attr('x',d=>x(d.k)).attr('y',d=>y(d.v)).attr('width',Math.max(x.bandwidth(),1))
@@ -1067,7 +1067,7 @@ function bars(elId,pairs){
 }
 
 /* ---------- render ---------- */
-const fmtLong=t=>new Date(t).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+const fmtLong=t=>new Date(t).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric',timeZone:'UTC'});
 function render(){
   visible=F();
   // show a territory panel only when the current filter puts events in it
