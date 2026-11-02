@@ -1209,7 +1209,7 @@ async function boot(){
     resolveInsetMembers();
     dFi.min=dTi.min=iso(T0); dFi.max=dTi.max=iso(T1);
     document.getElementById('brandSub').textContent=
-      DATA.rows.length.toLocaleString()+' events · '+DATA.day0+' to '+lastDate();
+      DATA.rows.length.toLocaleString()+' events ('+(DATA.rows.length-D.reduce((x,r)=>x+((r.f&16)?1:0),0)).toLocaleString()+' in person) · '+DATA.day0+' to '+lastDate();
     document.getElementById('provenance').innerHTML=
       PROV+'<br>UPDATED '+(DATA.built||'—').toUpperCase()+'.';
     sizeCanvas(); spark(); render();
