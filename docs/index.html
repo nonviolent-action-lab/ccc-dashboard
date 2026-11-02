@@ -250,7 +250,9 @@
         <div class="sliderhint">drag the handles to change the range</div></div>
     </div>
     <div class="g"><div class="lab">Filter by political issue</div><div class="chips" id="issues"></div>
-      <div class="note" style="margin-top:7px;">Matches any selected issue. Select none to see all.</div></div>
+      <div class="note" style="margin-top:7px;">Matches any selected issue. Select none to see all.</div>
+      <div class="note" id="issNote" style="margin-top:4px;"></div>
+      <div id="issVerb" style="margin-top:6px;"></div></div>
     <div class="g"><div class="lab">Filter by political valence</div><div class="chips" id="valence"></div></div>
     <div class="g"><div class="lab">Filter by event type</div><div class="chips" id="etypes"></div>
       <div class="note" id="typeNote" style="margin-top:7px;">DEMONSTRATION INCLUDES MARCHES, RALLIES AND VIGILS</div></div>
@@ -397,14 +399,14 @@ function initData(){
   CLAIMS=DATA.claimDict; LOCS=DATA.locDict; SRCS=DATA.srcDict;
   DAY0=new Date(DATA.day0+'T00:00:00Z');   // UTC midnight: no time-zone or DST shifts
   D=DATA.rows.map(r=>({
-    d:r[0], lat:r[1], lon:r[2], st:r[3], val:r[4], ty:r[5], iss:r[6],
+    d:r[0], lat:r[1], lon:r[2], st:r[3], val:r[4], ty:r[5], iss:r[6], isum:(r[14]==null?r[6]:r[14]),
     size:r[7], scat:r[8], f:r[9], claim:r[10], loc:r[11], src:r[12], nsrc:r[13],
     t:DAY0.getTime()+r[0]*MS, p:null
   }));
   T0=D[0].t; T1=D[D.length-1].t;
   S={from:T0,to:T1,issues:new Set(),valence:new Set(),
      types:new Set(),
-     arrests:false,damage:false,pInj:false,polInj:false,online:false,claim:''};
+     arrests:false,damage:false,pInj:false,polInj:false,online:false,issVerb:false,claim:''};
   buildControls();
 }
 function lastDate(){
@@ -415,7 +417,7 @@ function ok(r){
   if(r.t<S.from||r.t>S.to)return false;
   if(S.valence.size&&!S.valence.has(r.val))return false;
   if(S.types.size&&!S.types.has(r.ty))return false;
-  if(S.issues.size){let hit=false;for(const i of r.iss)if(S.issues.has(i)){hit=true;break;}if(!hit)return false;}
+  if(S.issues.size){let hit=false;for(const i of (S.issVerb?r.iss:r.isum))if(S.issues.has(i)){hit=true;break;}if(!hit)return false;}
   if(S.arrests&&!(r.f&1))return false;
   if(S.damage&&!(r.f&2))return false;
   if(S.pInj&&!(r.f&4))return false;
@@ -915,6 +917,15 @@ const od=document.createElement('div');od.className='tg';
 od.innerHTML='<div class="bx"></div><span>Include online actions</span>';
 od.onclick=()=>{S.online=!S.online;od.classList.toggle('on');render();};
 document.getElementById('online').appendChild(od);
+const ISS_NOTE_SUM="Issue tags are based on summaries of protesters\u2019 claims.";
+const ISS_NOTE_ALL="Issue tags are based on summaries of protesters\u2019 claims, plus issues mentioned on signs and chants.";
+const issNoteEl=document.getElementById('issNote');
+issNoteEl.textContent=ISS_NOTE_SUM;
+const iv=document.createElement('div');iv.className='tg';iv.id='issVerbTg';
+iv.innerHTML='<div class="bx"></div><span>Include issues mentioned on signs and chants</span>';
+iv.onclick=()=>{S.issVerb=!S.issVerb;iv.classList.toggle('on',S.issVerb);
+  issNoteEl.textContent=S.issVerb?ISS_NOTE_ALL:ISS_NOTE_SUM;render();};
+document.getElementById('issVerb').appendChild(iv);
 const q=document.getElementById('claimQ');
 let qt=null;
 q.addEventListener('input',()=>{clearTimeout(qt);
@@ -947,7 +958,7 @@ document.getElementById('reset').onclick=()=>{
   S.issues.clear();
   S.valence.clear();
   S.types.clear();
-  S.arrests=S.damage=S.pInj=S.polInj=S.online=false;S.claim='';q.value='';
+  S.arrests=S.damage=S.pInj=S.polInj=S.online=S.issVerb=false;S.claim='';q.value='';issNoteEl.textContent=ISS_NOTE_SUM;
   rA.value=0;rB.value=1000;
   dFi.value=iso(T0);dTi.value=iso(T1);
   document.querySelectorAll('#issues .chip,#valence .chip,#etypes .chip').forEach(c=>c.classList.remove('on'));
@@ -1081,7 +1092,7 @@ function render(){
   for(const r of visible){
     if(r.size!=null){tot+=r.size;known.push(r.size);}
     stC.set(r.st,(stC.get(r.st)||0)+1);
-    for(const i of r.iss)isC.set(i,(isC.get(i)||0)+1);
+    for(const i of (S.issVerb?r.iss:r.isum))isC.set(i,(isC.get(i)||0)+1);
   }
   known.sort((a,b)=>a-b);
   document.getElementById('sEv').textContent=visible.length.toLocaleString();
